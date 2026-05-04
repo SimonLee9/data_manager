@@ -1,0 +1,12 @@
+[Unit]
+Description=sn2_backup periodic — runs sn2-backup.service every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+# Catch up at most one missed run after the robot was off.
+Persistent=true
+Unit=sn2-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg
+
+# local credentials / state — never commit
+credentials.json
+token.json
+state.json
+*.token
+.env
+
+# self-install bundle — contains plaintext credentials
+sn2_install.sh

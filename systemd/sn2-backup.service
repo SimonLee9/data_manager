@@ -1,0 +1,15 @@
+[Unit]
+Description=sn2_backup oneshot — uploads AMR sn2_log data to Google Drive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rainbow
+EnvironmentFile=/home/rainbow/.sn2_backup/env
+ExecStart=/home/rainbow/.sn2_backup/venv/bin/python -m sn2_backup --config /home/rainbow/.sn2_backup/config.yaml
+# Don't fail the unit on cycle-level upload failures (those are emailed instead).
+SuccessExitStatus=0 1
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

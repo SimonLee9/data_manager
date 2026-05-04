@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /home/rainbow/ws/data_manager log --oneline -10)",
+      "Bash(systemctl --version)",
+      "Bash(chmod +x /home/rainbow/ws/data_manager/scripts/install_on_robot.sh)",
+      "Bash(bash -n /home/rainbow/ws/data_manager/scripts/install_on_robot.sh)",
+      "Bash(chmod +x /home/rainbow/ws/data_manager/scripts/build_bundle.sh)",
+      "Bash(bash -n /home/rainbow/ws/data_manager/scripts/build_bundle.sh)",
+      "Bash(bash scripts/build_bundle.sh --credentials /tmp/fake_creds.json --token /tmp/fake_token.json --app-password \"abcdefghijklmnop\")",
+      "Bash(bash -n /tmp/sn2_install.sh)"
+    ]
+  }
+}
