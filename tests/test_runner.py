@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Iterable
 
@@ -231,6 +232,30 @@ def test_failure_is_reported_and_failed_file_retried_next_cycle(
     notifier2 = FakeNotifier()
     run_once(config=cfg, state=state, drive_client=drive, notifier=notifier2, now=float(STABLE_S + 1_000_000))
     assert state.is_uploaded("bbx/old.csv", 1, STABLE_NS) is True
+
+
+def test_robot_id_change_re_announces_under_new_id(
+    tmp_path: Path, data_root: Path
+) -> None:
+    """If the operator edits config.robot_id later, the new id is re-announced."""
+    state = State.load(tmp_path / "state.json")
+    drive = FakeDrive()
+    notifier1 = FakeNotifier()
+    cfg1 = _make_config(data_root)  # robot_id="bot1"
+
+    run_once(config=cfg1, state=state, drive_client=drive, notifier=notifier1,
+             now=float(STABLE_S + 1_000_000))
+    assert notifier1.announce_calls == ["bot1"]
+    assert state.robot_id == "bot1"
+
+    # Operator changes the robot_id (e.g., via config edit) and reruns.
+    cfg2 = replace(cfg1, robot_id="bot2")
+    notifier2 = FakeNotifier()
+    run_once(config=cfg2, state=state, drive_client=drive, notifier=notifier2,
+             now=float(STABLE_S + 1_000_000))
+
+    assert notifier2.announce_calls == ["bot2"]
+    assert state.robot_id == "bot2"
 
 
 def test_dry_run_does_no_uploads_no_email_no_state_changes(

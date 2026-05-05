@@ -6,13 +6,20 @@ Priority:
   3. last 6 hex chars of the primary network interface's MAC, prefixed `robot-`
   4. hostname
   5. raise RuntimeError if nothing usable
+
+For step 3 we deliberately avoid `uuid.getnode()` because on hosts with Docker
+or other virtualization it can land on a container/bridge MAC, or fall back to
+a randomly-generated multicast address. Instead we read `/sys/class/net/*` and
+pick a stable physical interface, skipping known virtual ones (lo, docker*,
+veth*, br-*, virbr*, tun*, tap*) and any address with the multicast bit set.
 """
 from __future__ import annotations
 
+import glob
+import os
 import socket
 import subprocess
-import uuid
-from typing import Callable
+from typing import Callable, Iterable
 
 # Common BIOS/board placeholders that look like a serial but aren't.
 _GARBAGE = {
@@ -28,6 +35,11 @@ _GARBAGE = {
     "n/a",
     "unknown",
 }
+
+_VIRTUAL_PREFIXES = (
+    "docker", "veth", "br-", "br_", "virbr", "tun", "tap", "lxc", "vmnet",
+    "vnet", "kube", "flannel", "cni", "cali", "weave", "zt", "wg", "bond",
+)
 
 
 def is_meaningful_serial(value: str) -> bool:
@@ -56,18 +68,61 @@ def _real_get_serial() -> str | None:
     return out.stdout.strip()
 
 
+def select_primary_mac(addrs: Iterable[tuple[str, str]]) -> str | None:
+    """Pure function: pick the primary NIC's MAC from `(iface_name, mac)` pairs.
+
+    - Skips loopback and virtual / container interfaces by name prefix.
+    - Skips empty / null / multicast addresses.
+    - Among survivors prefers physical wired (`eth*`/`en*`), then wireless
+      (`wl*`), then anything else. Within the same priority, picks the
+      alphabetically-first interface name for determinism.
+    """
+    candidates: list[tuple[int, str, str]] = []
+    for iface, mac in addrs:
+        if not iface or iface == "lo":
+            continue
+        if iface.startswith(_VIRTUAL_PREFIXES):
+            continue
+        if not mac:
+            continue
+        normalized = mac.strip().lower().replace("-", ":")
+        if not normalized or normalized == "00:00:00:00:00:00":
+            continue
+        try:
+            first_octet = int(normalized.split(":")[0], 16)
+        except (ValueError, IndexError):
+            continue
+        # multicast bit (LSB of first octet) — set by uuid.getnode's random
+        # fallback, never set on real unicast NICs.
+        if first_octet & 0x01:
+            continue
+
+        if iface.startswith(("eth", "en")):
+            priority = 1
+        elif iface.startswith(("wlan", "wlx", "wl")):
+            priority = 2
+        else:
+            priority = 3
+        candidates.append((priority, iface, normalized))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    return candidates[0][2]
+
+
 def _real_get_mac() -> str | None:
-    try:
-        node = uuid.getnode()
-    except Exception:
-        return None
-    if not node:
-        return None
-    # uuid.getnode synthesizes a random multicast bit if it can't read a NIC.
-    # Bit 0x010000000000 (universal/local) being set means it's randomly generated.
-    if node & 0x010000000000:
-        return None
-    return f"{node:012x}"
+    """Read every `/sys/class/net/*/address` entry and pick the primary NIC."""
+    addrs: list[tuple[str, str]] = []
+    for path in sorted(glob.glob("/sys/class/net/*/address")):
+        iface = os.path.basename(os.path.dirname(path))
+        try:
+            with open(path) as fh:
+                mac = fh.read().strip()
+        except OSError:
+            continue
+        addrs.append((iface, mac))
+    return select_primary_mac(addrs)
 
 
 def _real_get_hostname() -> str:

@@ -52,9 +52,22 @@ def run_once(
     robot_id = resolve_robot_id(config_value=config.robot_id)
     log.info("resolved robot_id=%s (config=%r)", robot_id, config.robot_id)
 
-    # Persist robot_id to state on first sight (helps later debugging).
-    if state.robot_id != robot_id:
-        state.robot_id = robot_id
+    # Detect (and warn about) robot_id changing across cycles. Existing Drive
+    # files were uploaded under the OLD id; they are not auto-migrated, and
+    # local state.uploaded keys will continue to skip them. Operator can
+    # `rm ~/.sn2_backup/state.json` to force a full resync to the new folder.
+    if state.robot_id and state.robot_id != robot_id:
+        log.warning(
+            "robot_id changed from %r to %r. Existing files in Drive under "
+            "%r/ will not be migrated. To force a full re-upload to the new "
+            "folder, run:  rm ~/.sn2_backup/state.json",
+            state.robot_id, robot_id, state.robot_id,
+        )
+        # Re-announce under the new id so the operator gets an email about it
+        # even if announce_once was already satisfied.
+        state.robot_id_announced = False
+
+    state.robot_id = robot_id
 
     # ----- announce on first cycle -----
     if (

@@ -8,7 +8,12 @@
       "Bash(chmod +x /home/rainbow/ws/data_manager/scripts/build_bundle.sh)",
       "Bash(bash -n /home/rainbow/ws/data_manager/scripts/build_bundle.sh)",
       "Bash(bash scripts/build_bundle.sh --credentials /tmp/fake_creds.json --token /tmp/fake_token.json --app-password \"abcdefghijklmnop\")",
-      "Bash(bash -n /tmp/sn2_install.sh)"
+      "Bash(bash -n /tmp/sn2_install.sh)",
+      "Bash(python3 -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in ['src/sn2_backup/identity.py', 'src/sn2_backup/runner.py', 'tests/test_identity.py', 'tests/test_runner.py']]; print\\('all files parse cleanly'\\)\")",
+      "Bash(.venv/bin/pytest tests/test_identity.py tests/test_runner.py -q)",
+      "Bash(.venv/bin/pytest -q)",
+      "Bash(.venv/bin/pytest)",
+      "Bash(.venv/bin/python -c ' *)"
     ]
   }
 }

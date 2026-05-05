@@ -214,7 +214,7 @@ data_manager/
 │   ├── __init__.py
 │   ├── __main__.py        # CLI 진입점
 │   ├── config.py          # YAML 로드/검증
-│   ├── identity.py        # robot_id 결정 (config → dmidecode → MAC → hostname)
+│   ├── identity.py        # robot_id 결정 (config → dmidecode → /sys/class/net 기반 MAC → hostname)
 │   ├── state.py           # state.json 원자 읽기/쓰기
 │   ├── scanner.py         # data_root walk, mtime 가드, dedup
 │   ├── error_watch.py     # error_logs/ 신규 에러 라인 추출
@@ -273,3 +273,23 @@ ssh rainbow@<robot> 'bash sn2_install.sh'
 3. 수동으로 한 번 즉시 트리거: `sudo systemctl start sn2-backup.service`
 4. 메일이 스팸함에 들어갔는지 확인 (Gmail SMTP는 자기 발송이라도 첫 회 스팸 분류 가능)
 5. Drive 부모 폴더 ID가 맞는지: `grep parent_folder_id ~/.sn2_backup/config.yaml`
+
+### 같은 hostname 로봇이 여러 대인데 robot_id가 충돌
+원인: 자동 폴백 체인이 `dmidecode → MAC → hostname` 순인데, dmidecode가 의미없는 값(`Default String` 등)을 내고 MAC 후보가 docker/veth 인터페이스로 잡혀 걸러지면 hostname까지 내려와서 같은 ID로 폴딩됨.
+
+해결 (둘 중 하나):
+1. **명시적 robot_id**(권장 — fleet 배포): 각 로봇 `~/.sn2_backup/config.yaml`에 `robot_id: S100-B-001` 처럼 박고 `rm ~/.sn2_backup/state.json && sudo systemctl start sn2-backup.service`. 변경되면 새 ID로 자동 재-announcement 메일이 발송됨.
+2. **자동 폴백에 의존**: 현재 구현은 `/sys/class/net/*/address`를 직접 읽고 docker/veth/br-* 등을 제외하므로 같은 모델이라도 NIC 공장 MAC 끝 6자리가 달라 자동 분리됨. 진단:
+   ```bash
+   ~/.sn2_backup/venv/bin/python -c "
+   from sn2_backup.identity import _real_get_mac, select_primary_mac
+   import glob, os
+   addrs = []
+   for p in sorted(glob.glob('/sys/class/net/*/address')):
+       iface = os.path.basename(os.path.dirname(p))
+       mac = open(p).read().strip()
+       addrs.append((iface, mac))
+   print('all:', addrs)
+   print('selected:', select_primary_mac(addrs))
+   "
+   ```
