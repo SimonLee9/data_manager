@@ -12,6 +12,7 @@ from sn2_backup.email_notify import (
     build_robot_id_announcement_body,
 )
 from sn2_backup.error_watch import ErrorEvent
+from sn2_backup.identity import HostInfo, NetworkInterface
 
 
 class FakeSMTP:
@@ -127,6 +128,45 @@ def test_build_failure_body_handles_empty_list() -> None:
 def test_build_robot_id_announcement_body_mentions_id() -> None:
     body = build_robot_id_announcement_body("X123")
     assert "X123" in body
+
+
+def test_build_robot_id_announcement_body_includes_host_info() -> None:
+    host_info = HostInfo(
+        hostname="rainbow-ODROID-H4",
+        interfaces=[
+            NetworkInterface(name="enp2s0", mac="00:1e:06:45:97:69", ipv4="192.168.2.2"),
+            NetworkInterface(name="wlan0", mac="a0:47:d7:60:1e:3b", ipv4="192.168.201.6"),
+        ],
+    )
+    body = build_robot_id_announcement_body("robot-459768", host_info)
+    assert "robot-459768" in body
+    assert "rainbow-ODROID-H4" in body
+    assert "enp2s0" in body
+    assert "00:1e:06:45:97:69" in body
+    assert "192.168.2.2" in body
+    assert "wlan0" in body
+    assert "a0:47:d7:60:1e:3b" in body
+    assert "192.168.201.6" in body
+
+
+def test_build_robot_id_announcement_body_handles_no_ipv4() -> None:
+    host_info = HostInfo(
+        hostname="bot1",
+        interfaces=[
+            NetworkInterface(name="eth0", mac="00:1e:06:45:97:69", ipv4=None),
+        ],
+    )
+    body = build_robot_id_announcement_body("X", host_info)
+    assert "(no ipv4)" in body
+
+
+def test_build_robot_id_announcement_body_handles_no_interfaces() -> None:
+    host_info = HostInfo(hostname="solo", interfaces=[])
+    body = build_robot_id_announcement_body("X", host_info)
+    assert "solo" in body
+    assert "X" in body
+    # Should not crash; no interface section needed
+    assert "network interfaces" not in body
 
 
 def test_build_new_errors_body_includes_count_and_lines() -> None:

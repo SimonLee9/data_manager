@@ -15,7 +15,7 @@ from typing import Iterable, Protocol
 from .config import Config
 from .drive import DriveAPIError, ensure_folder_chain, upload_file
 from .error_watch import ErrorEvent, scan_new_errors
-from .identity import resolve_robot_id
+from .identity import HostInfo, gather_host_info, resolve_robot_id
 from .scanner import scan_candidates
 from .state import State
 
@@ -33,7 +33,7 @@ class CycleResult:
 
 
 class _NotifierLike(Protocol):
-    def announce_robot_id(self, robot_id: str) -> None: ...
+    def announce_robot_id(self, robot_id: str, host_info: HostInfo | None = None) -> None: ...
     def report_failure(self, *, robot_id: str, failures: Iterable[tuple[str, str]]) -> None: ...
     def report_new_errors(self, *, robot_id: str, events: Iterable[ErrorEvent]) -> None: ...
 
@@ -77,7 +77,12 @@ def run_once(
         and notifier is not None
     ):
         try:
-            notifier.announce_robot_id(robot_id)
+            host_info = gather_host_info()
+            log.info(
+                "host_info: hostname=%s, interfaces=%d",
+                host_info.hostname, len(host_info.interfaces),
+            )
+            notifier.announce_robot_id(robot_id, host_info)
             state.robot_id_announced = True
         except Exception:  # noqa: BLE001  — logged, not raised, so backup can proceed
             log.exception("robot_id announcement email failed; will retry next cycle")

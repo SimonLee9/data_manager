@@ -291,3 +291,15 @@ ssh rainbow@<robot> 'bash sn2_install.sh'
    print('selected:', select_primary_mac(addrs))
    "
    ```
+
+### 어느 robot_id가 어느 물리 로봇인지 헷갈림
+첫 사이클 announcement 메일에 `robot_id` + `hostname` + 모든 비-가상 인터페이스의 `(이름, MAC, IPv4)`가 포함돼서 매핑할 수 있어. 메일 잃었으면 로봇에서 직접:
+```bash
+~/.sn2_backup/venv/bin/python -c "
+from sn2_backup.identity import gather_host_info, resolve_robot_id
+import yaml
+cfg = yaml.safe_load(open('/home/rainbow/.sn2_backup/config.yaml'))
+print('robot_id =', resolve_robot_id(config_value=cfg.get('robot_id')))
+print(gather_host_info())
+"
+```

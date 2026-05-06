@@ -57,12 +57,12 @@ class FakeDrive:
 
 class FakeNotifier:
     def __init__(self) -> None:
-        self.announce_calls: list[str] = []
+        self.announce_calls: list[tuple[str, object]] = []
         self.failure_calls: list[tuple[str, list[tuple[str, str]]]] = []
         self.new_error_calls: list[tuple[str, list[ErrorEvent]]] = []
 
-    def announce_robot_id(self, robot_id: str) -> None:
-        self.announce_calls.append(robot_id)
+    def announce_robot_id(self, robot_id: str, host_info=None) -> None:
+        self.announce_calls.append((robot_id, host_info))
 
     def report_failure(self, *, robot_id: str, failures: Iterable[tuple[str, str]]) -> None:
         self.failure_calls.append((robot_id, list(failures)))
@@ -156,7 +156,7 @@ def test_first_cycle_announces_uploads_stable_files_and_reports_errors(
     assert "fresh.csv" not in uploaded_names
 
     # announcement happened on first cycle
-    assert notifier.announce_calls == ["bot1"]
+    assert [c[0] for c in notifier.announce_calls] == ["bot1"]
 
     # error_logs produced an event email
     assert len(notifier.new_error_calls) == 1
@@ -245,7 +245,7 @@ def test_robot_id_change_re_announces_under_new_id(
 
     run_once(config=cfg1, state=state, drive_client=drive, notifier=notifier1,
              now=float(STABLE_S + 1_000_000))
-    assert notifier1.announce_calls == ["bot1"]
+    assert [c[0] for c in notifier1.announce_calls] == ["bot1"]
     assert state.robot_id == "bot1"
 
     # Operator changes the robot_id (e.g., via config edit) and reruns.
@@ -254,7 +254,7 @@ def test_robot_id_change_re_announces_under_new_id(
     run_once(config=cfg2, state=state, drive_client=drive, notifier=notifier2,
              now=float(STABLE_S + 1_000_000))
 
-    assert notifier2.announce_calls == ["bot2"]
+    assert [c[0] for c in notifier2.announce_calls] == ["bot2"]
     assert state.robot_id == "bot2"
 
 

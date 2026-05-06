@@ -15,16 +15,36 @@ from email.message import EmailMessage
 from typing import Callable, ContextManager, Iterable
 
 from .error_watch import ErrorEvent
+from .identity import HostInfo
 
 
 # ---------- pure body builders (easy to unit-test) ----------
 
-def build_robot_id_announcement_body(robot_id: str) -> str:
-    return (
-        f"sn2_backup is now active on this robot.\n"
-        f"All uploads will go under robot_id = {robot_id!r}.\n"
-        "If this looks wrong, set `robot_id` in config.yaml and restart the timer."
-    )
+def build_robot_id_announcement_body(
+    robot_id: str,
+    host_info: HostInfo | None = None,
+) -> str:
+    lines = [
+        "sn2_backup is now active on this robot.",
+        "",
+        f"  robot_id:  {robot_id}",
+    ]
+    if host_info is not None:
+        lines.append(f"  hostname:  {host_info.hostname}")
+        if host_info.interfaces:
+            lines.append("")
+            lines.append("  network interfaces (excluding lo / docker / veth / br):")
+            # Right-pad columns for readability in monospace mail clients
+            name_w = max((len(i.name) for i in host_info.interfaces), default=4)
+            for iface in host_info.interfaces:
+                ip = iface.ipv4 or "(no ipv4)"
+                lines.append(f"    {iface.name.ljust(name_w)}  {iface.mac}  {ip}")
+    lines += [
+        "",
+        f"All uploads will go under robot_id = {robot_id!r}.",
+        "If this looks wrong, set `robot_id` in config.yaml and restart the timer.",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def build_failure_body(*, robot_id: str, failures: Iterable[tuple[str, str]]) -> str:
@@ -105,10 +125,14 @@ class Notifier:
             smtp.send_message(msg)
 
     # ----- event-shaped helpers -----
-    def announce_robot_id(self, robot_id: str) -> None:
+    def announce_robot_id(
+        self,
+        robot_id: str,
+        host_info: HostInfo | None = None,
+    ) -> None:
         self.send(
             subject=f"[sn2_backup] robot_id={robot_id} now active",
-            body=build_robot_id_announcement_body(robot_id),
+            body=build_robot_id_announcement_body(robot_id, host_info),
         )
 
     def report_failure(

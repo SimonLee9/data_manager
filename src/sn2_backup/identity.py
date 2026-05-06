@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import socket
 import subprocess
+from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 # Common BIOS/board placeholders that look like a serial but aren't.
@@ -127,6 +129,71 @@ def _real_get_mac() -> str | None:
 
 def _real_get_hostname() -> str:
     return socket.gethostname()
+
+
+# ---------- host fingerprint (for announcement emails) ----------
+
+@dataclass(frozen=True)
+class NetworkInterface:
+    name: str
+    mac: str
+    ipv4: str | None
+
+
+@dataclass(frozen=True)
+class HostInfo:
+    hostname: str
+    interfaces: list[NetworkInterface] = field(default_factory=list)
+
+
+def _get_ipv4(iface: str) -> str | None:
+    """Return the IPv4 address of `iface` if any, else None.
+
+    Uses the `ip` command (universally available on Linux distros we care
+    about). Failure is non-fatal — we just return None and the caller logs
+    "(no ipv4)".
+    """
+    try:
+        out = subprocess.run(
+            ["ip", "-4", "-o", "addr", "show", "dev", iface],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    m = re.search(r"\binet (\d+\.\d+\.\d+\.\d+)\b", out.stdout)
+    return m.group(1) if m else None
+
+
+def gather_host_info() -> HostInfo:
+    """Collect hostname + non-virtual interface details for diagnostic emails.
+
+    Skips loopback and virtual interfaces using the same prefix list as the
+    MAC selector — the goal is to surface the network identities a human can
+    use to identify this physical robot from the network.
+    """
+    hostname = _real_get_hostname()
+    interfaces: list[NetworkInterface] = []
+    for path in sorted(glob.glob("/sys/class/net/*/address")):
+        iface = os.path.basename(os.path.dirname(path))
+        if not iface or iface == "lo":
+            continue
+        if iface.startswith(_VIRTUAL_PREFIXES):
+            continue
+        try:
+            with open(path) as fh:
+                mac = fh.read().strip()
+        except OSError:
+            continue
+        if not mac or mac == "00:00:00:00:00:00":
+            continue
+        interfaces.append(
+            NetworkInterface(name=iface, mac=mac, ipv4=_get_ipv4(iface))
+        )
+    return HostInfo(hostname=hostname, interfaces=interfaces)
 
 
 def resolve_robot_id(
