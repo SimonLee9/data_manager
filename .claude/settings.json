@@ -17,7 +17,9 @@
       "Bash(git push *)",
       "Bash(sed -i 's/notifier\\\\.announce_calls == \\\\[\"bot1\"\\\\]/[c[0] for c in notifier.announce_calls] == [\"bot1\"]/' /home/rainbow/ws/data_manager/tests/test_runner.py)",
       "Bash(sed -i 's/notifier1\\\\.announce_calls == \\\\[\"bot1\"\\\\]/[c[0] for c in notifier1.announce_calls] == [\"bot1\"]/' /home/rainbow/ws/data_manager/tests/test_runner.py)",
-      "Bash(sed -i 's/notifier2\\\\.announce_calls == \\\\[\"bot2\"\\\\]/[c[0] for c in notifier2.announce_calls] == [\"bot2\"]/' /home/rainbow/ws/data_manager/tests/test_runner.py)"
+      "Bash(sed -i 's/notifier2\\\\.announce_calls == \\\\[\"bot2\"\\\\]/[c[0] for c in notifier2.announce_calls] == [\"bot2\"]/' /home/rainbow/ws/data_manager/tests/test_runner.py)",
+      "Bash(chmod +x /home/rainbow/ws/data_manager/scripts/update_on_robot.sh)",
+      "Bash(bash -n /home/rainbow/ws/data_manager/scripts/update_on_robot.sh)"
     ]
   }
 }

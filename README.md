@@ -164,6 +164,33 @@ systemd 없이 dry-run까지만 보고 싶으면 (예: 노트북 테스트):
 bash scripts/install_on_robot.sh --no-systemd
 ```
 
+## 업데이트 (이미 깐 로봇에 최신 코드 적용)
+
+GitHub `main` 브랜치에서 최신 코드를 받아와 재설치하는 한 줄 스크립트:
+
+```bash
+bash ~/ws/data_manager/scripts/update_on_robot.sh
+```
+
+스크립트가 하는 일:
+
+- **보존**: `~/.sn2_backup/{credentials.json, token.json, env, config.yaml, state.json}` (자격증명·앱비번·robot_id·업로드 이력 모두 그대로)
+- **교체**: `~/ws/data_manager/` (기존은 `.bak.<timestamp>`로 백업 후 fresh clone)
+- **재생성**: `~/.sn2_backup/venv/` (새 의존성 반영을 위해 강제 재생성)
+- 끝나면 `install_on_robot.sh`를 자동 호출 → systemd unit 재등록 + dry-run smoke test
+
+업데이트 중에도 기존 systemd timer는 계속 돌아. 사이클이 도중에 겹치면 systemd가 중복 실행을 막아주니 안전.
+
+포크 사용 중이면 환경변수로 override:
+
+```bash
+SN2_REPO_URL=https://github.com/me/data_manager.git \
+SN2_REPO_BRANCH=develop \
+bash ~/ws/data_manager/scripts/update_on_robot.sh
+```
+
+> ⚠️ **첫 설치엔 이 스크립트 사용 불가**. 자격증명·토큰·env가 없는 로봇이면 안내 메시지 출력 후 종료해. 첫 설치는 [한 줄 배포](#-한-줄-배포-self-install-bundle) 사용.
+
 ## 동작 확인
 
 ```bash
@@ -204,6 +231,7 @@ data_manager/
 ├── scripts/
 │   ├── build_bundle.sh       # 노트북에서 self-install bundle 생성 (한 줄 배포용)
 │   ├── install_on_robot.sh   # 로봇에서 한 방에 설치 + systemd 등록
+│   ├── update_on_robot.sh    # 로봇에서 최신 코드 GitHub에서 받아와 재설치 (자격증명 보존)
 │   └── authorize_drive.py    # 노트북에서 1회 OAuth → token.json 발급
 ├── src/sn2_backup/
 │   ├── __init__.py
