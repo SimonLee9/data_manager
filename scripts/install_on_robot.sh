@@ -64,6 +64,41 @@ require_cmd() {
     fi
 }
 
+# Ensure python3 venv + ensurepip are usable. On Debian/Ubuntu the runtime
+# splits these out into a separate package (e.g. python3.10-venv on 22.04,
+# python3.12-venv on 24.04). If missing, attempt auto-install via apt.
+ensure_python_venv() {
+    if python3 -c "import venv, ensurepip" >/dev/null 2>&1; then
+        return 0
+    fi
+    local pyver pkg
+    pyver=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "")
+    if [[ -z "$pyver" ]]; then
+        err "could not determine python3 version"
+        return 1
+    fi
+    pkg="python${pyver}-venv"
+
+    if ! command -v apt-get >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+        err "python venv missing and cannot auto-install (need apt-get + sudo)"
+        err "  install manually: sudo apt install -y $pkg"
+        return 1
+    fi
+
+    info "python venv missing — auto-installing $pkg via apt (sudo prompt may appear)"
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg"; then
+        err "apt install $pkg failed"
+        err "  try:  sudo apt update && sudo apt install -y $pkg"
+        return 1
+    fi
+    if ! python3 -c "import venv, ensurepip" >/dev/null 2>&1; then
+        err "$pkg installed but venv/ensurepip still not usable"
+        return 1
+    fi
+    info "$pkg installed"
+    return 0
+}
+
 step "Pre-flight checks"
 MISSING=0
 require_cmd python3 || MISSING=1
@@ -71,12 +106,9 @@ if [[ $NO_SYSTEMD -eq 0 ]]; then
     require_cmd systemctl || MISSING=1
     require_cmd sudo      || MISSING=1
 fi
-if ! python3 -c "import venv, ensurepip" >/dev/null 2>&1; then
-    err "python3 venv/ensurepip missing — install with: sudo apt install -y python3-venv"
-    MISSING=1
-fi
 [[ $MISSING -eq 0 ]] || exit 1
-info "host has python3, venv module, and systemctl"
+ensure_python_venv || exit 1
+info "host has python3 (with venv), and systemctl"
 
 info "repo:      $REPO_ROOT"
 info "install:   $SN2_DIR"
