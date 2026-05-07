@@ -292,6 +292,26 @@ scp sn2_install.sh rainbow@<robot>:
 ssh rainbow@<robot> 'bash sn2_install.sh'
 ```
 
+### 오늘 날짜의 daily log (`snlog_YYYY-MM-DD.log`)가 Drive에 안 올라감
+원인: 기본 `mtime_quiet_seconds: 300` 가드 — 5분 동안 mtime 변경 없는 파일만 후보. 로봇이 동작 중이면 오늘 daily log는 계속 append되어 mtime이 항상 fresh → 가드에 걸려 그날 안에 안 올라감. 어제 분은 자정 rotate 후 더 안 변하니 다음 사이클에 정상 업로드됨.
+
+해결: `~/.sn2_backup/config.yaml`의 `scanner.always_upload_globs`에 패턴 추가. 매칭되는 파일은 mtime 가드 무시하고 (size, mtime_ns) 변경분만 dedup해서 매 사이클마다 업로드.
+```yaml
+scanner:
+  mtime_quiet_seconds: 300
+  always_upload_globs:
+    - "snlog/snlog_*.log"
+    - "snlog/*-log-list.html"
+```
+적용:
+```bash
+sudo systemctl start sn2-backup.service
+journalctl -u sn2-backup -n 30 --no-pager
+```
+`config.example.yaml`엔 이 두 패턴이 기본으로 들어 있어. 새로 깔린 로봇이라면 자동 적용됨. 기존 config는 직접 추가해야 해.
+
+⚠️ 트래픽 트레이드오프: 매 사이클(15분)마다 daily log 전체를 Drive update로 올림. 15MB log면 8시간 동작 시 ~480MB/day 업로드. 개인 Drive 쿼터 안에서 무시 가능한 수준이지만 기억해둬.
+
 ### 첫 사이클인데 메일이 안 옴 / Drive에 폴더가 안 생김
 체크리스트:
 1. `journalctl -u sn2-backup -n 100 --no-pager` — 에러 메시지 확인

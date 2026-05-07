@@ -35,6 +35,11 @@ class EmailConfig:
 class ScannerConfig:
     mtime_quiet_seconds: int = 300
     exclude_globs: list[str] = field(default_factory=list)
+    # Files matching any of these glob patterns bypass the mtime quiet guard
+    # and are uploaded as soon as their (size, mtime_ns) differs from state.
+    # Useful for actively-appended log files where you want the running file
+    # mirrored to Drive throughout the day, not only after it stops growing.
+    always_upload_globs: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -110,7 +115,14 @@ def load_config(path: Path | str) -> Config:
     excludes = scanner_raw.get("exclude_globs") or []
     if not isinstance(excludes, list) or not all(isinstance(s, str) for s in excludes):
         raise ConfigError("scanner.exclude_globs must be a list of strings")
-    scanner = ScannerConfig(mtime_quiet_seconds=quiet, exclude_globs=list(excludes))
+    always = scanner_raw.get("always_upload_globs") or []
+    if not isinstance(always, list) or not all(isinstance(s, str) for s in always):
+        raise ConfigError("scanner.always_upload_globs must be a list of strings")
+    scanner = ScannerConfig(
+        mtime_quiet_seconds=quiet,
+        exclude_globs=list(excludes),
+        always_upload_globs=list(always),
+    )
 
     return Config(
         data_root=data_root,

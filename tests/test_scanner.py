@@ -114,6 +114,89 @@ def test_returns_candidate_with_size_mtime_and_abspath(tmp_path: Path) -> None:
     assert abs(c.mtime_ns - int(1_700_000_000 * 1e9)) < 1_000_000
 
 
+def test_always_upload_globs_bypass_mtime_quiet_guard(tmp_path: Path) -> None:
+    """A file matching always_upload_globs is included even if mtime is fresh."""
+    fresh_log = tmp_path / "snlog" / "snlog_2026-05-07.log"
+    _touch(fresh_log, b"line1\nline2\n", mtime=1_700_000_990)  # only 10s old
+    fresh_csv = tmp_path / "bbx" / "rotating.csv"
+    _touch(fresh_csv, b"col1,col2\n", mtime=1_700_000_990)     # also fresh
+
+    state = State.load(tmp_path / "state.json")
+
+    cands = list(scan_candidates(
+        data_root=tmp_path,
+        state=state,
+        mtime_quiet_seconds=300,
+        always_upload_globs=["snlog/snlog_*.log"],
+        now=1_700_001_000.0,
+    ))
+
+    relpaths = [c.relpath for c in cands]
+    assert "snlog/snlog_2026-05-07.log" in relpaths
+    assert "bbx/rotating.csv" not in relpaths
+
+
+def test_always_upload_globs_still_dedupes_unchanged(tmp_path: Path) -> None:
+    """An already-uploaded file with same (size, mtime_ns) is skipped even
+    when it matches always_upload_globs."""
+    log = tmp_path / "snlog" / "snlog_today.log"
+    _touch(log, b"abc", mtime=1_700_000_990)
+    state = State.load(tmp_path / "state.json")
+    state.record_upload(
+        relpath="snlog/snlog_today.log",
+        size=3,
+        mtime_ns=int(1_700_000_990 * 1e9),
+        drive_file_id="x",
+    )
+
+    cands = list(scan_candidates(
+        data_root=tmp_path,
+        state=state,
+        mtime_quiet_seconds=300,
+        always_upload_globs=["snlog/snlog_*.log"],
+        now=1_700_001_000.0,
+    ))
+    assert cands == []
+
+
+def test_always_upload_globs_re_includes_when_size_grows(tmp_path: Path) -> None:
+    log = tmp_path / "snlog" / "snlog_today.log"
+    _touch(log, b"first chunk", mtime=1_700_000_990)
+    state = State.load(tmp_path / "state.json")
+    # Pretend we previously uploaded a smaller version
+    state.record_upload(
+        relpath="snlog/snlog_today.log",
+        size=5,
+        mtime_ns=int(1_700_000_500 * 1e9),
+        drive_file_id="old-version",
+    )
+
+    cands = list(scan_candidates(
+        data_root=tmp_path,
+        state=state,
+        mtime_quiet_seconds=300,
+        always_upload_globs=["snlog/snlog_*.log"],
+        now=1_700_001_000.0,
+    ))
+    assert [c.relpath for c in cands] == ["snlog/snlog_today.log"]
+
+
+def test_default_no_always_upload_globs_keeps_old_behavior(tmp_path: Path) -> None:
+    """Without the new config, scan_candidates behaves like before."""
+    fresh_log = tmp_path / "snlog" / "snlog_today.log"
+    _touch(fresh_log, b"x", mtime=1_700_000_990)  # 10s old
+    state = State.load(tmp_path / "state.json")
+
+    cands = list(scan_candidates(
+        data_root=tmp_path,
+        state=state,
+        mtime_quiet_seconds=300,
+        now=1_700_001_000.0,
+    ))
+    # Fresh file filtered out, no candidates
+    assert cands == []
+
+
 def test_ignores_state_file_in_data_root(tmp_path: Path) -> None:
     """If state.json happened to live inside data_root we wouldn't want to upload it,
     but in our design state lives elsewhere. Even so, scanner should not crash on

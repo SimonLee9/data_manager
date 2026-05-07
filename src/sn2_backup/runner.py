@@ -93,6 +93,7 @@ def run_once(
             data_root=config.data_root,
             state=state,
             mtime_quiet_seconds=config.scanner.mtime_quiet_seconds,
+            always_upload_globs=config.scanner.always_upload_globs,
             now=now,
         )
     )

@@ -36,3 +36,10 @@ scanner:
   # bbx CSVs rotate every ~2 minutes, so 300s comfortably excludes the live one.
   mtime_quiet_seconds: 300
   exclude_globs: []
+  # Files matching these patterns BYPASS the mtime quiet guard so the running
+  # daily log gets mirrored to Drive throughout the day instead of waiting
+  # until midnight rotation. They still go through the size+mtime dedup, so
+  # only actually-changed bytes trigger a re-upload.
+  always_upload_globs:
+    - "snlog/snlog_*.log"
+    - "snlog/*-log-list.html"

@@ -109,6 +109,31 @@ def test_negative_mtime_quiet_seconds_rejected(tmp_path: Path) -> None:
         load_config(p)
 
 
+def test_always_upload_globs_loaded(tmp_path: Path) -> None:
+    p = tmp_path / "c.yaml"
+    body = _VALID + (
+        "\nscanner:\n"
+        "  mtime_quiet_seconds: 300\n"
+        "  always_upload_globs:\n"
+        "    - 'snlog/snlog_*.log'\n"
+        "    - 'snlog/*-log-list.html'\n"
+    )
+    _write(p, body)
+    cfg = load_config(p)
+    assert cfg.scanner.always_upload_globs == [
+        "snlog/snlog_*.log",
+        "snlog/*-log-list.html",
+    ]
+
+
+def test_always_upload_globs_must_be_list_of_strings(tmp_path: Path) -> None:
+    p = tmp_path / "c.yaml"
+    body = _VALID + "\nscanner:\n  always_upload_globs: 'not-a-list'\n"
+    _write(p, body)
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
 def test_missing_file(tmp_path: Path) -> None:
     with pytest.raises(ConfigError):
         load_config(tmp_path / "nope.yaml")
