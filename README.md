@@ -147,7 +147,7 @@ bash scripts/install_on_robot.sh
 - `credentials.json`, `token.json` 존재 확인 — 없으면 안내 후 중단
 - `env` 파일 없으면 **앱 비밀번호를 입력 받아서 자동 생성** (입력 가려짐, 16자 검증, `chmod 600`)
 - `~/.sn2_backup/venv` 생성 + `pip install -e <repo>` — 이전에 `python3-venv` 누락으로 깨진 venv가 있으면 **자동 감지하고 재생성**
-- `~/.sn2_backup/config.yaml` 없으면 템플릿에서 생성 (있으면 손대지 않음)
+- `~/.sn2_backup/config.yaml`: 없으면 템플릿에서 생성, 있으면 **새로 추가된 템플릿 키만 머지** (사용자가 수정한 값들은 그대로 보존). 새 옵션 (예: `always_upload_globs`)이 자동으로 적용됨.
 - `--dry-run` 스모크 테스트 1회 실행 (Drive에 안 올림)
 - systemd unit 두 개 설치 후 `enable --now`
 - 다음 실행 시각 / 상태 출력
@@ -295,7 +295,14 @@ ssh rainbow@<robot> 'bash sn2_install.sh'
 ### 오늘 날짜의 daily log (`snlog_YYYY-MM-DD.log`)가 Drive에 안 올라감
 원인: 기본 `mtime_quiet_seconds: 300` 가드 — 5분 동안 mtime 변경 없는 파일만 후보. 로봇이 동작 중이면 오늘 daily log는 계속 append되어 mtime이 항상 fresh → 가드에 걸려 그날 안에 안 올라감. 어제 분은 자정 rotate 후 더 안 변하니 다음 사이클에 정상 업로드됨.
 
-해결: `~/.sn2_backup/config.yaml`의 `scanner.always_upload_globs`에 패턴 추가. 매칭되는 파일은 mtime 가드 무시하고 (size, mtime_ns) 변경분만 dedup해서 매 사이클마다 업로드.
+해결: `update_on_robot.sh` 한 번 돌리면 끝. install 단계에서 config.yaml에 새 키가 자동으로 머지돼. 사용자 설정값(`parent_folder_id`, `robot_id`, 커스텀 `mtime_quiet_seconds` 등)은 보존됨.
+```bash
+bash ~/ws/data_manager/scripts/update_on_robot.sh
+sudo systemctl start sn2-backup.service
+journalctl -u sn2-backup -n 30 --no-pager
+```
+
+수동으로 추가하고 싶으면 `~/.sn2_backup/config.yaml`의 `scanner:` 블록에 직접:
 ```yaml
 scanner:
   mtime_quiet_seconds: 300
@@ -303,12 +310,6 @@ scanner:
     - "snlog/snlog_*.log"
     - "snlog/*-log-list.html"
 ```
-적용:
-```bash
-sudo systemctl start sn2-backup.service
-journalctl -u sn2-backup -n 30 --no-pager
-```
-`config.example.yaml`엔 이 두 패턴이 기본으로 들어 있어. 새로 깔린 로봇이라면 자동 적용됨. 기존 config는 직접 추가해야 해.
 
 ⚠️ 트래픽 트레이드오프: 매 사이클(15분)마다 daily log 전체를 Drive update로 올림. 15MB log면 8시간 동작 시 ~480MB/day 업로드. 개인 Drive 쿼터 안에서 무시 가능한 수준이지만 기억해둬.
 

@@ -234,6 +234,10 @@ info "installing sn2_backup (editable) + dependencies"
 "$VENV_DIR/bin/pip" install --quiet -e "$REPO_ROOT"
 
 # ---------- config ----------
+# On a fresh install we copy the template verbatim. On a re-run / update we
+# merge any keys present in the template but missing from the user's config —
+# this picks up new options (e.g. always_upload_globs) without clobbering the
+# user's customizations (parent_folder_id, robot_id, etc).
 step "Config file"
 if [[ ! -e "$CONFIG_PATH" ]]; then
     cp "$REPO_ROOT/config.example.yaml" "$CONFIG_PATH"
@@ -241,7 +245,53 @@ if [[ ! -e "$CONFIG_PATH" ]]; then
     info "wrote $CONFIG_PATH from template"
     warn "if you want to pin a specific robot_id, edit $CONFIG_PATH"
 else
-    info "$CONFIG_PATH already exists (left untouched)"
+    SYNC_OUT=$(
+        EXAMPLE_PATH="$REPO_ROOT/config.example.yaml" \
+        TARGET_PATH="$CONFIG_PATH" \
+        "$VENV_DIR/bin/python" - <<'PY'
+import os, yaml
+
+example_path = os.environ["EXAMPLE_PATH"]
+target_path = os.environ["TARGET_PATH"]
+
+example = yaml.safe_load(open(example_path)) or {}
+target = yaml.safe_load(open(target_path)) or {}
+
+def merge_missing(src, dst, path=""):
+    """Recursively add keys from src missing in dst. Never overwrites existing values."""
+    added = []
+    for k, v in src.items():
+        full = f"{path}{k}"
+        if k not in dst:
+            dst[k] = v
+            added.append(full)
+        elif isinstance(v, dict) and isinstance(dst[k], dict):
+            added.extend(merge_missing(v, dst[k], path=f"{full}."))
+    return added
+
+added = merge_missing(example, target)
+if added:
+    with open(target_path, "w") as f:
+        yaml.safe_dump(target, f, sort_keys=False, default_flow_style=False)
+    print("ADDED " + " ".join(added))
+else:
+    print("UPTODATE")
+PY
+    ) || SYNC_OUT="ERROR"
+
+    case "$SYNC_OUT" in
+        "UPTODATE")
+            info "$CONFIG_PATH already has every template key"
+            ;;
+        ADDED*)
+            info "$CONFIG_PATH synced (preserved existing values)"
+            info "  new keys: ${SYNC_OUT#ADDED }"
+            ;;
+        *)
+            warn "config merge failed; $CONFIG_PATH left untouched"
+            warn "  output: $SYNC_OUT"
+            ;;
+    esac
 fi
 
 # ---------- dry-run smoke test ----------
